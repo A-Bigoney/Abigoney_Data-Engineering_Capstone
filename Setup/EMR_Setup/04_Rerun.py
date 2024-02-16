@@ -32,7 +32,6 @@ sftp = ssh_client.open_sftp()
 sftp.put('C:\\Users\\abigoney\\Documents\\School\\NanoDegree\\Capstone\\Setup\\dwh.cfg', 'dwh.cfg')
 
 sftp.put('C:\\Users\\abigoney\\Documents\\School\\NanoDegree\\Capstone\\Project\\etl.py', 'etl.py')
-sftp.put('C:\\Users\\abigoney\\Documents\\School\\NanoDegree\\Capstone\\Project\\run.sh', 'run.sh')
 
 sftp.close()
 ssh_client.close()
