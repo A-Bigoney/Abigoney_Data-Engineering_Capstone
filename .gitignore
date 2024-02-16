@@ -4,4 +4,5 @@
 /Project/Data_Files/Surface_Temps/GlobalLandTemperaturesByCity.csv
 /Project/Data_Files
 /Setup/dwh.cfg
+/Setup
 /Setup/private_dwh.cfg
