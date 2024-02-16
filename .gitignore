@@ -1,8 +1,8 @@
 /Setup/ClusterID.json
 /AWS_Udacity_accessKeys.csv
-/RAW_Provided
-/Project/Data_Files/Surface_Temps/GlobalLandTemperaturesByCity.csv
-/Project/Data_Files
 /Setup/dwh.cfg
-/Setup
 /Setup/private_dwh.cfg
+/RAW_Provided
+/Project/Data_Files
+/Setup
+
