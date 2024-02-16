@@ -50,13 +50,19 @@ def create_spark_session():
     spark = SparkSession \
         .builder \
         .config("spark.jars.packages", "org.apache.hadoop:hadoop-aws:2.7.0") \
-        .config("spark.hadoop.fs.s3a.region", "us-west-2") \
         .getOrCreate()
     return spark
 
+#def create_spark_session():
+#    spark = SparkSession \
+#        .builder \
+#        .config("spark.jars.packages", "org.apache.hadoop:hadoop-aws:2.7.0") \
+#        .config("spark.hadoop.fs.s3a.region", "us-west-2") \
+#        .getOrCreate()
+#    return spark
 
 
-def upload_immigration_data(spark, input_bucket, input_file, output_table):
+def upload_imigration_data(spark, input_bucket, temp_bucket, input_file, output_table):
     """
         Get csv filepath to read in
     """
@@ -108,6 +114,9 @@ def upload_immigration_data(spark, input_bucket, input_file, output_table):
     
     print("*********************************Showing changed data types befor posting immigration data to redshift************************************")
 
+    # Drop the _c0 column
+    immigration_df = immigration_df.drop("_c0")
+
     immigration_df.show()
     # data quality validation
     if immigration_df.count() == 0:    
@@ -122,7 +131,7 @@ def upload_immigration_data(spark, input_bucket, input_file, output_table):
         .option("user", db_user) \
         .option("password", db_password) \
         .option("aws_iam_role", db_iam) \
-        .option("tempdir", os.path.join(input_bucket,"temp/")) \
+        .option("tempdir", os.path.join(temp_bucket,"temp/")) \
         .mode("overwrite") \
         .save() 
     
@@ -130,7 +139,7 @@ def upload_immigration_data(spark, input_bucket, input_file, output_table):
 
 
 
-def upload_cities_demographics(spark, input_bucket, input_file, output_table):
+def upload_cities_demographics(spark, input_bucket, temp_bucket, input_file, output_table):
     """
         Get csv filepath to read in
     """
@@ -196,7 +205,7 @@ def upload_cities_demographics(spark, input_bucket, input_file, output_table):
         .option("user", db_user) \
         .option("password", db_password) \
         .option("aws_iam_role", db_iam) \
-        .option("tempdir", os.path.join(input_bucket,"temp/")) \
+        .option("tempdir", os.path.join(temp_bucket,"temp/")) \
         .mode("overwrite") \
         .save() 
     
@@ -205,7 +214,7 @@ def upload_cities_demographics(spark, input_bucket, input_file, output_table):
 
 
 
-def upload_airport_codes(spark, input_bucket, input_file, output_table):
+def upload_airport_codes(spark, input_bucket, temp_bucket, input_file, output_table):
     """
         Get csv filepath to read in
     """
@@ -254,7 +263,7 @@ def upload_airport_codes(spark, input_bucket, input_file, output_table):
         .option("user", db_user) \
         .option("password", db_password) \
         .option("aws_iam_role", db_iam) \
-        .option("tempdir", os.path.join(input_bucket,"temp/")) \
+        .option("tempdir", os.path.join(temp_bucket,"temp/")) \
         .mode("overwrite") \
         .save() 
     
@@ -262,7 +271,7 @@ def upload_airport_codes(spark, input_bucket, input_file, output_table):
 
 
 
-def upload_sas_data(spark, input_bucket, input_file, output_table):
+def upload_imigration_parquet_data(spark, input_bucket, temp_bucket, input_file, output_table):
     """
         Get csv filepath to read in
     """
@@ -272,43 +281,182 @@ def upload_sas_data(spark, input_bucket, input_file, output_table):
     """
         Reading csv in
     """
-    sas_df = spark.read.parquet(input_data)
+    immigration_df = spark.read.parquet(input_data)
     #csv_df.head()
-    sas_df.show()
-
-    if sas_df.count() == 0:    
-        print("Error: No data to process.")
-        exit() 
-
-    # convert data types
-    #airport_df = airport_df.withColumn("city", col("city").cast("varchar(256)")) \
-    #    .withColumn("state", col("state").cast("varchar(256)")) \
-    #    .withColumn("median_age", col("median_age").cast("float")) \
-        
-
+    print(f"*********************************Showing UNchanged data types from {output_table} data to redshift************************************")
+    immigration_df.show()
     
+    immigration_df = immigration_df.withColumn("cicid", col("cicid").cast("int")) \
+        .withColumn("i94yr", col("i94yr").cast("int")) \
+        .withColumn("i94mon", col("i94mon").cast("int")) \
+        .withColumn("i94cit", col("i94cit").cast("int")) \
+        .withColumn("i94res", col("i94res").cast("int")) \
+        .withColumn("i94port", col("i94port").cast("varchar(256)")) \
+        .withColumn("arrdate", col("arrdate").cast("int")) \
+        .withColumn("i94mode", col("i94mode").cast("int")) \
+        .withColumn("i94addr", col("i94addr").cast("varchar(256)")) \
+        .withColumn("depdate", col("depdate").cast("int")) \
+        .withColumn("i94bir", col("i94bir").cast("int")) \
+        .withColumn("i94visa", col("i94visa").cast("int")) \
+        .withColumn("count", col("count").cast("int")) \
+        .withColumn("dtadfile", col("dtadfile").cast("int")) \
+        .withColumn("visapost", col("visapost").cast("varchar(256)")) \
+        .withColumn("occup", col("occup").cast("varchar(256)")) \
+        .withColumn("entdepa", col("entdepa").cast("varchar(256)")) \
+        .withColumn("entdepd", col("entdepd").cast("varchar(256)")) \
+        .withColumn("entdepu", col("entdepu").cast("varchar(256)")) \
+        .withColumn("matflag", col("matflag").cast("varchar(256)")) \
+        .withColumn("biryear", col("biryear").cast("int")) \
+        .withColumn("dtaddto", col("dtaddto").cast("int")) \
+        .withColumn("gender", col("gender").cast("varchar(256)")) \
+        .withColumn("insnum", col("insnum").cast("varchar(256)")) \
+        .withColumn("airline", col("airline").cast("varchar(256)")) \
+        .withColumn("admnum", col("admnum").cast("int")) \
+        .withColumn("fltno", col("fltno").cast("varchar(256)")) \
+        .withColumn("visatype", col("visatype").cast("varchar(256)")) 
+
     print(f"*********************************Showing changed data types befor posting {output_table} data to redshift************************************")
 
-    sas_df.show()
+    immigration_df.show()
     # data quality validation
-    if sas_df.count() == 0:    
+    if immigration_df.count() == 0:    
         print("Error: No data to process.")
         exit() 
 
+
+
     # load data into Redshift
-    sas_df.write \
+    immigration_df.write \
         .format("jdbc") \
         .option("url", jdbc_host) \
         .option("dbtable", output_table) \
         .option("user", db_user) \
         .option("password", db_password) \
         .option("aws_iam_role", db_iam) \
-        .option("tempdir", os.path.join(input_bucket,"temp/")) \
+        .option("tempdir", os.path.join(temp_bucket,"temp/")) \
         .mode("overwrite") \
         .save() 
     
     print(f"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!Ingested {output_table} data into Redshift!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
 
+
+
+def upload_temp_data(spark, input_bucket, temp_bucket, input_file, output_table):
+    """
+        Get csv filepath to read in
+    """
+    input_data = os.path.join(input_bucket, input_file)
+    print(f"Reading from {input_data} ===============================================================================================")
+
+    """
+        Reading csv in
+    """
+    ground_temp_df = spark.read.option("header", True).csv(input_data)
+    #csv_df.head()
+    print(f"*********************************Showing UNchanged data types from {output_table} data to redshift************************************")
+    ground_temp_df.show()
+
+    ground_temp_df = ground_temp_df.withColumnRenamed("dt", "date") \
+        .withColumnRenamed("AverageTemperature", "average_temperature") \
+		.withColumnRenamed("AverageTemperatureUncertainty", "average_temperature_uncertainty") \
+		.withColumnRenamed("City", "city") \
+		.withColumnRenamed("Country", "country") \
+		.withColumnRenamed("Latitude", "latitude") \
+		.withColumnRenamed("Longitude", "longitude") 
+
+    print(f"*********************************Showing changed Coloum names from {output_table} data to redshift************************************")
+    ground_temp_df.show()
+
+    #Splite date column into year, mon
+    ground_temp_df = ground_temp_df.withColumn("year", split(ground_temp_df["date"], "-")[0])
+    ground_temp_df = ground_temp_df.withColumn("mon", split(ground_temp_df["date"], "-")[1])
+
+    # Drop the original date column
+    ground_temp_df = ground_temp_df.drop("date")
+
+    ground_temp_df = ground_temp_df.withColumn("year", col("year").cast("int")) \
+            .withColumn("mon", col("mon").cast("int")) \
+            .withColumn("average_temperature", col("average_temperature").cast("float")) \
+            .withColumn("average_temperature_uncertainty", col("average_temperature_uncertainty").cast("float")) \
+            .withColumn("city", col("city").cast("varchar(256)")) \
+            .withColumn("country", col("country").cast("varchar(256)")) \
+            .withColumn("latitude", col("latitude").cast("float")) \
+            .withColumn("longitude", col("longitude").cast("float"))
+
+    
+    print(f"*********************************Showing changed data types befor posting {output_table} data to redshift************************************")
+
+    ground_temp_df.show()
+    # data quality validation
+    if ground_temp_df.count() == 0:    
+        print("Error: No data to process.")
+        exit() 
+
+
+
+    # load data into Redshift
+    ground_temp_df.write \
+        .format("jdbc") \
+        .option("url", jdbc_host) \
+        .option("dbtable", output_table) \
+        .option("user", db_user) \
+        .option("password", db_password) \
+        .option("aws_iam_role", db_iam) \
+        .option("tempdir", os.path.join(temp_bucket,"temp/")) \
+        .mode("overwrite") \
+        .save() 
+    
+    print(f"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!Ingested {output_table} data into Redshift!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+
+def creat_fact_table(spark):
+    spark.sql("""
+        CREATE TABLE IF NOT EXISTS fact_table AS (
+            SELECT
+                i.cicid,
+                i.i94yr,
+                i.i94mon,
+                i.i94cit,
+                i.i94res,
+                i.i94port,
+                i.arrdate,
+                i.i94mode,
+                i.i94addr,
+                i.depdate,
+                i.i94bir,
+                i.i94visa,
+                i.count,
+                i.dtadfile,
+                i.visapost,
+                i.occup,
+                i.entdepa,
+                i.entdepd,
+                i.entdepu,
+                i.matflag,
+                i.biryear,
+                i.dtaddto,
+                i.gender,
+                i.insnum,
+                i.airline,
+                i.admnum,
+                i.fltno,
+                i.visatype,
+                s.average_temperature,
+                s.average_temperature_uncertainty,
+                d.median_age,
+                d.male_population,
+                d.female_population,
+                d.total_population,
+                d.veteran_population,
+                d.foreign_born,
+                d.ave_household_size,
+                d.state_code,
+                d.race,
+                d.count
+            FROM immigration i
+            JOIN surface_temps s ON i.i94yr = s.year AND i.i94mon = s.mon AND i.i94port = s.city
+            JOIN cities_demog d ON i.i94port = d.city
+        )
+    """)
 
 
 def main():
@@ -319,17 +467,29 @@ def main():
     """
         Declaring the input data location
     """
-    input_bucket = "s3a://andrews-logging/Data_Files/"
+    input_bucket = "s3://andrew-capstone-data/Data_Files/"
+    """
+        Declaring the temp bucket that I have Write access to
+    """
+    temp_bucket = "s3a://andrews-logging/"
     """
         Running immigration_data_sample.csv
     """
-    #upload_immigration_data(spark, input_bucket, "immigration_data_sample.csv", "immigration" )
 
-    upload_cities_demographics(spark, input_bucket, "us-cities-demographics.csv", "cities_demog" )
+    #upload_cities_demographics(spark, input_bucket, temp_bucket,"us-cities-demographics.csv", "cities_demog" )
 
-    upload_airport_codes(spark, input_bucket, "airport-codes_csv.csv", "airport_codes" )
+    #upload_airport_codes(spark, input_bucket, temp_bucket, "airport-codes_csv.csv", "airport_codes" )
 
-    #upload_sas_data(spark, input_bucket, "sas_data", "sas_data" )
+    """
+    Select only one Imigration data to upload per run
+    the Parquet data takes a long time to run
+    """
+    #upload_imigration_data(spark, input_bucket, temp_bucket, "immigration_data_sample.csv", "immigration" )
+    #upload_imigration_parquet_data(spark, input_bucket, temp_bucket, "sas_data", "immigration" )
+
+    #upload_temp_data(spark, input_bucket, temp_bucket, "Surface_Temps/GlobalLandTemperaturesByMajorCity.csv", "surface_temps" )
+
+    creat_fact_table(spark)
 
 
 if __name__ == "__main__":
