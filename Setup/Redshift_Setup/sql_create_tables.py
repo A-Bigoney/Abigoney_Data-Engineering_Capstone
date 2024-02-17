@@ -10,7 +10,9 @@ config.read('dwh.cfg')
 immigration_table_drop =  "DROP TABLE IF EXISTS immigration;"
 cities_demog_table_drop =  "DROP TABLE IF EXISTS cities_demog;"
 airport_codes_table_drop =  "DROP TABLE IF EXISTS airport_codes;"
-surface_temps_table_drop =  "DROP TABLE IF EXISTS surface_temps;"
+city_surface_temps_table_drop =  "DROP TABLE IF EXISTS city_surface_temps;"
+state_surface_temps_table_drop =  "DROP TABLE IF EXISTS state_surface_temps;"
+
 
 OLDimmigration_table_create = ("""
     CREATE TABLE IF NOT EXISTS immigration (
@@ -67,7 +69,7 @@ airport_codes_table_create = ("""
     CREATE TABLE IF NOT EXISTS airport_codes (
 		ident			varchar(5),
 		type			varchar(256),
-		name			varchar(256),
+		airtport_name	varchar(256),
 		elevation_ft	int,
 		continent		varchar(256),
 		iso_country		varchar(2),
@@ -114,11 +116,11 @@ immigration_table_create = ("""
 	);
 """)
 
-surface_temps_table_create = ("""
-    CREATE TABLE IF NOT EXISTS surface_temps(
+city_surface_temps_table_create = ("""
+    CREATE TABLE IF NOT EXISTS city_surface_temps(
 		year								int,
 		mon									int,
-		average_temperature					float,
+		average_temperature					float   	NOT NULL,
 		average_temperature_uncertainty		float,
 		city								varchar(256),
 		country								varchar(256),
@@ -127,5 +129,16 @@ surface_temps_table_create = ("""
 	);
 """)
 
-drop_table_queries = [airport_codes_table_drop, immigration_table_drop, cities_demog_table_drop, surface_temps_table_drop]
-create_table_queries = [immigration_table_create, cities_demog_table_create, airport_codes_table_create, surface_temps_table_create]
+state_surface_temps_table_create = ("""
+    CREATE TABLE IF NOT EXISTS state_surface_temps(
+		year								int,
+		mon									int,
+		average_temperature					float   	NOT NULL,
+		average_temperature_uncertainty		float,
+		state								varchar(256),
+		country								varchar(256)
+	);
+""")
+
+drop_table_queries = [airport_codes_table_drop, immigration_table_drop, cities_demog_table_drop, city_surface_temps_table_drop, state_surface_temps_table_drop]
+create_table_queries = [immigration_table_create, cities_demog_table_create, airport_codes_table_create, city_surface_temps_table_create, state_surface_temps_table_create]

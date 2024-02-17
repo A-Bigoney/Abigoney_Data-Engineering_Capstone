@@ -1,7 +1,0 @@
-ClusterID.json
-../AWS_Udacity_accessKeys.csv
-../RAW_Provided
-../Project/Data_Files/Surface_Temps/GlobalLandTemperaturesByCity.csv
-../Project/Data_Files
-dwh.cfg
-private_dwh.cfg

@@ -1,5 +1,11 @@
     Fresh AWS setup:
     Create an addmin account in AWS and update the `private_dwh.cfg` with the access Keys for that account
+        Setup AWS CLI
+            Delete ~/.aws/credentials
+            run: aws configure
+                enter creds from private_dwh.cfg
+                    Region = us-west-2
+            Run `aws sts get-caller-identity` to make sure it is configured correctly
     In us-west-2 give a VPC Public Access
         AWS -> Top left select `us-west-2` -> "VPC dashboard" -> "Security groups" -> select a "Security group ID" -> "Edit inbout rules" -> "Add rule"
             All traffic, All, 0 - 65535, Anywhere-IPv4, 0.0.0.0/0 
@@ -11,18 +17,18 @@
 
 
     Start Redshfit run:
-        python ./Redshift_setup/aws_setup.py
+        python ./Redshift_setup/01_aws_setup.py
 
     Connect to the Redshift cluster with Dbeaver: https://youtu.be/s8HckCTC6aA?t=536
 
     Create The tables Run:
-        python .\Redshift_setup\create_tables.py
+        python .\Redshift_setup\02_create_tables.py
 
     Shutdown the Redshift Server when done:
-        python.exe .\Redshift_Setup\cleanup_aws.py
+        python.exe .\Redshift_Setup\05_cleanup_aws.py
 
 
-    Setup ERM envierment
+
     install AWS CLI
     Delete ~/.aws/credentials
     run: aws configure
@@ -30,6 +36,7 @@
             Region = us-west-2
     Run `aws sts get-caller-identity` to make sure it is configured correctly
 
+    Setup ERM envierment
     Create Amazon EC2 key pair run from batch:
         aws ec2 create-key-pair ^
         --key-name spark-cluster ^
@@ -100,4 +107,6 @@ Quick refrance:
 
     #SSH to the master node
         pip install configparser
+        sudo yum install python-devel postgresql-devel
+        pip install psycopg2
         spark-submit --master yarn ./etl.py
