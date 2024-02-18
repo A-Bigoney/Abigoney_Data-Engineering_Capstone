@@ -9,7 +9,8 @@ from pyspark.sql import SQLContext
 from pyspark.sql.functions import split
 from pyspark import SparkContext, SparkConf
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, when 
+from pyspark.sql.functions import col, when, abs
+import pyspark.sql.functions as F
 import sys
 
 
@@ -27,6 +28,15 @@ os.environ['AWS_SECRET_ACCESS_KEY']=config.get('AWS', 'SECRET')
 
 AWS_ACCESS_KEY_ID=config.get('AWS', 'KEY')
 AWS_SECRET_ACCESS_KEY=config.get('AWS', 'SECRET')
+
+"""
+    Declaring the input data location
+"""
+input_bucket = config.get('S3', 'INPUT_BUCKET')
+"""
+    Declaring the temp bucket that I have Write access to
+"""
+temp_bucket = config.get('S3', 'TEMP_BUCKET')
 
 print(f"AWS_ACCESS_KEY_ID {AWS_ACCESS_KEY_ID}")
 db_iam = config.get('IAM_ROLE', 'ARN')
@@ -49,6 +59,143 @@ def create_spark_session():
     return spark
 
 
+
+
+def upload_cities_demographics(spark, input_bucket, temp_bucket, input_file, output_table):
+    """
+        Get csv filepath to read in
+    """
+    input_data = os.path.join(input_bucket, input_file)
+    print(f"Reading from {input_data} ===============================================================================================")
+
+    """
+        Reading csv in
+    """
+    #demographics_df = spark.read.option("header", True).option("delimiter", ";").json(input_data)
+    demographics_df = spark.read.option("header", True).json(input_data)
+    #csv_df.head()
+    demographics_df.show()
+
+    if demographics_df.count() == 0:    
+        print("Error: No data to process.")
+        exit() 
+
+
+    # rename columns
+    demographics_df = demographics_df.withColumnRenamed("city", "city") \
+        .withColumnRenamed("State", "state") \
+        .withColumnRenamed("Median Age", "median_age") \
+        .withColumnRenamed("Male Population", "male_population") \
+        .withColumnRenamed("Female Population", "female_population") \
+        .withColumnRenamed("Total Population", "total_population") \
+        .withColumnRenamed("number_of_veterans", "veteran_population") \
+        .withColumnRenamed("Foreign-born", "foreign_born") \
+        .withColumnRenamed("average_household_size", "ave_household_size") \
+        .withColumnRenamed("State Code", "state_code") \
+        .withColumnRenamed("Race", "race") \
+        .withColumnRenamed("Count", "count") 
+
+
+    # convert data types
+    demographics_df = demographics_df.withColumn("city", col("city").cast("varchar(256)")) \
+        .withColumn("state", col("state").cast("varchar(256)")) \
+        .withColumn("median_age", col("median_age").cast("float")) \
+        .withColumn("male_population", col("male_population").cast("int")) \
+        .withColumn("female_population", col("female_population").cast("int")) \
+        .withColumn("total_population", col("total_population").cast("int")) \
+        .withColumn("veteran_population", col("veteran_population").cast("int")) \
+        .withColumn("foreign_born", col("foreign_born").cast("int")) \
+        .withColumn("ave_household_size", col("ave_household_size").cast("float")) \
+        .withColumn("state_code", col("state_code").cast("varchar(2)")) \
+        .withColumn("race", col("race").cast("varchar(256)")) \
+		.withColumn("count", col("count").cast("int"))
+        
+
+    
+    print(f"*********************************Showing changed data types befor posting {output_table} data to redshift************************************")
+
+    demographics_df.show()
+    # data quality validation
+    if demographics_df.count() == 0:    
+        print("Error: No data to process.")
+        exit() 
+
+    """
+    # load data into Redshift
+    demographics_df.write \
+        .format("jdbc") \
+        .option("url", jdbc_host) \
+        .option("dbtable", output_table) \
+        .option("user", db_user) \
+        .option("password", db_password) \
+        .option("aws_iam_role", db_iam) \
+        .option("tempdir", os.path.join(temp_bucket,"temp/")) \
+        .mode("overwrite") \
+        .save() 
+    """
+    print(f"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!Returning {output_table} data!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+    return(demographics_df)
+
+def upload_airport_codes(spark, input_bucket, temp_bucket, input_file, output_table):
+    """
+        Get csv filepath to read in
+    """
+    input_data = os.path.join(input_bucket, input_file)
+    print(f"Reading from {input_data} ===============================================================================================")
+
+    """
+        Reading csv in
+    """
+    airport_df = spark.read.option("header", True).csv(input_data)
+    airport_df = airport_df.withColumnRenamed("name", "airtport_name")
+    #csv_df.head()
+    #airport_df.show()
+
+    if airport_df.count() == 0:    
+        print("Error: No data to process.")
+        exit() 
+
+    airport_df = airport_df.filter(F.col("iso_country") == "US")
+    #Splite coordinates column into lat long
+    airport_df = airport_df.withColumn("latitude", split(airport_df["coordinates"], ", ")[1])
+    airport_df = airport_df.withColumn("longitude", split(airport_df["coordinates"], ", ")[0])
+    #airport_df = airport_df.withColumn("latitude", split(airport_df["coordinates"], ", ")[0])
+    #airport_df = airport_df.withColumn("longitude", split(airport_df["coordinates"], ", ")[1])
+    airport_df = airport_df.withColumn("state_code", split(airport_df["iso_region"], "-")[1])
+
+    #lets round out the Lat Long so they have a better chance of getting a match with the other tables.
+    airport_df = airport_df.withColumn("latitude", col("latitude").cast("float")) \
+        .withColumn("longitude", col("longitude").cast("float"))
+        
+    airport_df = airport_df.withColumn("int_lat", airport_df["latitude"])
+    airport_df = airport_df.withColumn("int_long", airport_df["longitude"])
+
+    # Drop the original coordinates column
+    airport_df = airport_df.drop("coordinates")
+    
+    print(f"*********************************Showing changed data types befor posting {output_table} data to redshift************************************")
+
+    airport_df.show()
+    # data quality validation
+    if airport_df.count() == 0:    
+        print("Error: No data to process.")
+        exit() 
+
+    """
+    # load data into Redshift
+    airport_df.write \
+        .format("jdbc") \
+        .option("url", jdbc_host) \
+        .option("dbtable", output_table) \
+        .option("user", db_user) \
+        .option("password", db_password) \
+        .option("aws_iam_role", db_iam) \
+        .option("tempdir", os.path.join(temp_bucket,"temp/")) \
+        .mode("overwrite") \
+        .save() 
+    """
+    print(f"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!Returning {output_table} data !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+    return(airport_df)
 
 def upload_immigration_data(spark, input_bucket, temp_bucket, input_file, output_table):
     """
@@ -111,6 +258,7 @@ def upload_immigration_data(spark, input_bucket, temp_bucket, input_file, output
         print("Error: No data to process.")
         exit() 
 
+    """
     # load data into Redshift
     immigration_df.write \
         .format("jdbc") \
@@ -122,129 +270,9 @@ def upload_immigration_data(spark, input_bucket, temp_bucket, input_file, output
         .option("tempdir", os.path.join(temp_bucket,"temp/")) \
         .mode("overwrite") \
         .save() 
-    
-    print(f"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!Ingested {output_table} data into Redshift!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-
-def upload_cities_demographics(spark, input_bucket, temp_bucket, input_file, output_table):
     """
-        Get csv filepath to read in
-    """
-    input_data = os.path.join(input_bucket, input_file)
-    print(f"Reading from {input_data} ===============================================================================================")
-
-    """
-        Reading csv in
-    """
-    demographics_df = spark.read.option("header", True).option("delimiter", ";").csv(input_data)
-    #csv_df.head()
-    demographics_df.show()
-
-    if demographics_df.count() == 0:    
-        print("Error: No data to process.")
-        exit() 
-
-
-    # rename columns
-    demographics_df = demographics_df.withColumnRenamed("City", "city") \
-        .withColumnRenamed("State", "state") \
-        .withColumnRenamed("Median Age", "median_age") \
-        .withColumnRenamed("Male Population", "male_population") \
-        .withColumnRenamed("Female Population", "female_population") \
-        .withColumnRenamed("Total Population", "total_population") \
-        .withColumnRenamed("Number of Veterans", "veteran_population") \
-        .withColumnRenamed("Foreign-born", "foreign_born") \
-        .withColumnRenamed("Average Household Size", "ave_household_size") \
-        .withColumnRenamed("State Code", "state_code") \
-        .withColumnRenamed("Race", "race") \
-        .withColumnRenamed("Count", "count") 
-
-
-    # convert data types
-    demographics_df = demographics_df.withColumn("city", col("city").cast("varchar(256)")) \
-        .withColumn("state", col("state").cast("varchar(256)")) \
-        .withColumn("median_age", col("median_age").cast("float")) \
-        .withColumn("male_population", col("male_population").cast("int")) \
-        .withColumn("female_population", col("female_population").cast("int")) \
-        .withColumn("total_population", col("total_population").cast("int")) \
-        .withColumn("veteran_population", col("veteran_population").cast("int")) \
-        .withColumn("foreign_born", col("foreign_born").cast("int")) \
-        .withColumn("ave_household_size", col("ave_household_size").cast("float")) \
-        .withColumn("state_code", col("state_code").cast("varchar(2)")) \
-        .withColumn("race", col("race").cast("varchar(256)")) \
-		.withColumn("count", col("count").cast("int"))
-        
-
-    
-    print(f"*********************************Showing changed data types befor posting {output_table} data to redshift************************************")
-
-    demographics_df.show()
-    # data quality validation
-    if demographics_df.count() == 0:    
-        print("Error: No data to process.")
-        exit() 
-
-    # load data into Redshift
-    demographics_df.write \
-        .format("jdbc") \
-        .option("url", jdbc_host) \
-        .option("dbtable", output_table) \
-        .option("user", db_user) \
-        .option("password", db_password) \
-        .option("aws_iam_role", db_iam) \
-        .option("tempdir", os.path.join(temp_bucket,"temp/")) \
-        .mode("overwrite") \
-        .save() 
-    
-    print(f"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!Ingested {output_table} data into Redshift!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-
-def upload_airport_codes(spark, input_bucket, temp_bucket, input_file, output_table):
-    """
-        Get csv filepath to read in
-    """
-    input_data = os.path.join(input_bucket, input_file)
-    print(f"Reading from {input_data} ===============================================================================================")
-
-    """
-        Reading csv in
-    """
-    airport_df = spark.read.option("header", True).csv(input_data)
-    airport_df = airport_df.withColumnRenamed("name", "airtport_name")
-    #csv_df.head()
-    airport_df.show()
-
-    if airport_df.count() == 0:    
-        print("Error: No data to process.")
-        exit() 
-
-    #Splite coordinates column into lat long
-    airport_df = airport_df.withColumn("latitude", split(airport_df["coordinates"], ", ")[0])
-    airport_df = airport_df.withColumn("longitude", split(airport_df["coordinates"], ", ")[1])
-
-    # Drop the original coordinates column
-    airport_df = airport_df.drop("coordinates")
-    
-    
-    print(f"*********************************Showing changed data types befor posting {output_table} data to redshift************************************")
-
-    airport_df.show()
-    # data quality validation
-    if airport_df.count() == 0:    
-        print("Error: No data to process.")
-        exit() 
-
-    # load data into Redshift
-    airport_df.write \
-        .format("jdbc") \
-        .option("url", jdbc_host) \
-        .option("dbtable", output_table) \
-        .option("user", db_user) \
-        .option("password", db_password) \
-        .option("aws_iam_role", db_iam) \
-        .option("tempdir", os.path.join(temp_bucket,"temp/")) \
-        .mode("overwrite") \
-        .save() 
-    
-    print(f"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!Ingested {output_table} data into Redshift!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+    print(f"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!Returning {output_table} dataframe!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+    return(immigration_df)
 
 def upload_immigration_parquet_data(spark, input_bucket, temp_bucket, input_file, output_table):
     """
@@ -299,7 +327,7 @@ def upload_immigration_parquet_data(spark, input_bucket, temp_bucket, input_file
         exit() 
 
 
-
+    """
     # load data into Redshift
     immigration_df.write \
         .format("jdbc") \
@@ -311,8 +339,9 @@ def upload_immigration_parquet_data(spark, input_bucket, temp_bucket, input_file
         .option("tempdir", os.path.join(temp_bucket,"temp/")) \
         .mode("overwrite") \
         .save() 
-    
-    print(f"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!Ingested {output_table} data into Redshift!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+    """
+    print(f"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!Returning {output_table} dataframe!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+    return(immigration_df)
 
 def upload_city_temp_data(spark, input_bucket, temp_bucket, input_file, output_table):
     """
@@ -326,8 +355,8 @@ def upload_city_temp_data(spark, input_bucket, temp_bucket, input_file, output_t
     """
     city_ground_temp_df = spark.read.option("header", True).csv(input_data)
     #csv_df.head()
-    print(f"*********************************Showing UNchanged data types from {output_table} data to redshift************************************")
-    city_ground_temp_df.show()
+    #print(f"*********************************Showing UNchanged data types from {output_table} data to redshift************************************")
+    #city_ground_temp_df.show()
 
     city_ground_temp_df = city_ground_temp_df.withColumnRenamed("dt", "date") \
         .withColumnRenamed("AverageTemperature", "average_temperature") \
@@ -337,13 +366,12 @@ def upload_city_temp_data(spark, input_bucket, temp_bucket, input_file, output_t
 		.withColumnRenamed("Latitude", "latitude") \
 		.withColumnRenamed("Longitude", "longitude") 
 
-    print(f"*********************************Showing changed Coloum names from {output_table} data to redshift************************************")
-    city_ground_temp_df.show()
-
+    #print(f"*********************************Showing changed Coloum names from {output_table} data to redshift************************************")
+    #city_ground_temp_df.show()
+    city_ground_temp_df.filter(F.col("country") == "United States")
     #Splite date column into year, mon
     city_ground_temp_df = city_ground_temp_df.withColumn("year", split(city_ground_temp_df["date"], "-")[0])
     city_ground_temp_df = city_ground_temp_df.withColumn("mon", split(city_ground_temp_df["date"], "-")[1])
-
     # Drop the original date column
     city_ground_temp_df = city_ground_temp_df.drop("date")
 
@@ -365,22 +393,18 @@ def upload_city_temp_data(spark, input_bucket, temp_bucket, input_file, output_t
     # Apply the UDF to the 'longitude' column
     city_ground_temp_df = city_ground_temp_df.withColumn('longitude', convert_coordinates_udf('longitude'))
 
-    # Apply the function to the 'latitude' column
-    #city_ground_temp_df['latitude'] = city_ground_temp_df['latitude'].apply(lambda x: convert_coordinates(x))
-    # Apply the function to the 'latitude' column
-    #city_ground_temp_df['longitude'] = city_ground_temp_df['longitude'].apply(lambda x: convert_coordinates(x))
-
     city_ground_temp_df = city_ground_temp_df.withColumn("year", col("year").cast("int")) \
             .withColumn("mon", col("mon").cast("int")) \
             .withColumn("average_temperature", col("average_temperature").cast("float")) \
             .withColumn("average_temperature_uncertainty", col("average_temperature_uncertainty").cast("float")) \
             .withColumn("city", col("city").cast("varchar(256)")) \
             .withColumn("country", col("country").cast("varchar(256)")) \
-            .withColumn("latitude", col("latitude").cast("float")) \
-            .withColumn("longitude", col("longitude").cast("float"))
-    
+            .withColumn("latitude", col("latitude").cast("decimal(9, 2)")) \
+            .withColumn("longitude", col("longitude").cast("decimal(9, 2)"))
 
-    
+    #Drop rows with null for average_tempature
+    city_ground_temp_df = city_ground_temp_df.dropna(subset=["average_temperature"])
+
     print(f"*********************************Showing changed data types befor posting {output_table} data to redshift************************************")
 
     city_ground_temp_df.show()
@@ -393,7 +417,7 @@ def upload_city_temp_data(spark, input_bucket, temp_bucket, input_file, output_t
 
     # load data into Redshift
     # Will drop rows that have NULL for the tempature data, as they add not value
-    city_ground_temp_df.write \
+    """city_ground_temp_df.write \
         .format("jdbc") \
         .option("url", jdbc_host) \
         .option("dbtable", output_table) \
@@ -408,10 +432,10 @@ def upload_city_temp_data(spark, input_bucket, temp_bucket, input_file, output_t
         .mode("overwrite") \
         .mode("ignore") \
         .save() 
+    """
+    print(f"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!returning {output_table} dataframe!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+    return(city_ground_temp_df)
     
-    print(f"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!Ingested {output_table} data into Redshift!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-
-
 def upload_state_temp_data(spark, input_bucket, temp_bucket, input_file, output_table):
     """
         Get csv filepath to read in
@@ -458,6 +482,7 @@ def upload_state_temp_data(spark, input_bucket, temp_bucket, input_file, output_
         print("-----------------------------------------------------------Error: No data to process.----------------------------------------------------------------")
         exit() 
 
+    """
     # load data into Redshift
     # Will drop rows that have NULL for the tempature data, as they add not value
     state_ground_temp_df.write \
@@ -470,39 +495,40 @@ def upload_state_temp_data(spark, input_bucket, temp_bucket, input_file, output_
         .option("tempdir", os.path.join(temp_bucket,"temp/")) \
         .mode("overwrite") \
         .save() 
+    """
+    print(f"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!Returning {output_table} dataframe!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+    return(state_ground_temp_df)
+
+def airport_city_location(airport_df, city_ground_temp_df):
+    """
+    This table lets you know the location of airports and the their tempatures to compare how there altitude effects their region
+    """
+    tolerance = 0.5 
+    # Join city_ground_temp_df and airport_df on latitude and longitude columns
+    city_location_df = city_ground_temp_df.join(
+        airport_df,
+        (abs(city_ground_temp_df.latitude - airport_df.latitude) <= tolerance) &
+        (abs(city_ground_temp_df.longitude - airport_df.longitude) <= tolerance),
+        "inner") \
+            .select(
+                col("city").cast("varchar(256)").alias("city"),
+                col("state_code").cast("varchar(256)").alias("state_code"),
+                col("country").cast("varchar(256)").alias("country"),
+                col("airtport_name").cast("varchar(256)").alias("airtport_name"),
+                col("municipality").cast("varchar(256)").alias("municipality"),
+                col("elevation_ft").cast("int").alias("elevation_ft"),
+                col("year").cast("int").alias("year"),
+                col("mon").cast("int").alias("mon"),
+                col("average_temperature").cast("float").alias("average_temperature"),
+                col("average_temperature_uncertainty").cast("float").alias("average_temperature_uncertainty"),
+                col("int_lat").cast("float").alias("latitude"),
+                col("int_long").cast("float").alias("longitude")                
+            )
     
-    print(f"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!Ingested {output_table} data into Redshift!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-
-def create_dim_tables(spark, temp_bucket, create_dim_queries):
-    properties = {
-        "user": db_user,
-        "password": db_password,
-        "driver": "com.amazon.redshift.jdbc42.Driver",
-        "aws_iam_role": db_iam,
-        "tempdir": os.path.join(temp_bucket,"temp/"),
-        "url": jdbc_host
-        }
-    #Creates all demention tables
-    for query in create_dim_queries:
-        output_df = spark.read.jdbc(url=properties["url"], table=query, properties=properties)
-        print(f"*******************************created {query} and returend ***************************")
-        output_df.show()
-
-def create_fact_table(spark, temp_bucket, create_fact_queries):
-    properties = {
-    "user": db_user,
-    "password": db_password,
-    "driver": "com.amazon.redshift.jdbc42.Driver",
-    "aws_iam_role": db_iam,
-    "tempdir": os.path.join(temp_bucket,"temp/"),
-    "url": jdbc_host
-    }
-    #Creates the fact table
-    for query in create_fact_queries:
-        output_df = spark.read.jdbc(url=properties["url"], table=query, properties=properties)
-        print(f"*******************************created {query} and returend ***************************")
-        output_df.show()
-        
+    city_location_df = city_location_df.drop_duplicates()
+    print(f"@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@Joined Dataframe@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
+    city_location_df.show()
+    print(f"@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@Showed Joined Dataframe@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
 
 def main():
     """
@@ -510,34 +536,28 @@ def main():
     """
     spark = create_spark_session()
     """
-        Declaring the input data location
-    """
-    input_bucket = "s3://andrew-capstone-data/Data_Files/"
-    """
-        Declaring the temp bucket that I have Write access to
-    """
-    temp_bucket = "s3a://andrews-logging/"
-    """
         Running immigration_data_sample.csv
     """
 
-    #upload_cities_demographics(spark, input_bucket, temp_bucket,"us-cities-demographics.csv", "cities_demog" )
 
-    #upload_airport_codes(spark, input_bucket, temp_bucket, "airport-codes_csv.csv", "airport_codes" )
+    airport_df = upload_airport_codes(spark, input_bucket, temp_bucket, "airport-codes_csv.csv", "airport_codes" )
+    #city_ground_temp_df = upload_city_temp_data(spark, input_bucket, temp_bucket, "Surface_Temps/GlobalLandTemperaturesByMajorCity.csv", "city_surface_temps" )
+    city_ground_temp_df = upload_city_temp_data(spark, input_bucket, temp_bucket, "Surface_Temps/GlobalLandTemperaturesByMajorCity.csv", "city_surface_temps" )
+    airport_city_location(airport_df, city_ground_temp_df)
 
     """
     Select only one immigration data to upload per run
     the Parquet data takes a long time to run
     """
-    #upload_immigration_data(spark, input_bucket, temp_bucket, "immigration_data_sample.csv", "immigration" )
-    #upload_immigration_parquet_data(spark, input_bucket, temp_bucket, "sas_data", "immigration" )
-
-    upload_city_temp_data(spark, input_bucket, temp_bucket, "Surface_Temps/GlobalLandTemperaturesByMajorCity.csv", "city_surface_temps" )
+    #immigration_df = upload_immigration_data(spark, input_bucket, temp_bucket, "immigration_data_sample.csv", "immigration" )
+    #immigration_df = upload_immigration_parquet_data(spark, input_bucket, temp_bucket, "sas_data", "immigration" )
     
-    #upload_state_temp_data(spark, input_bucket, temp_bucket, "Surface_Temps/GlobalLandTemperaturesByState.csv", "state_surface_temps" )
+    #demographics_df = upload_cities_demographics(spark, input_bucket, temp_bucket,"us-cities-demographics.json", "cities_demog" )
+        
+    #state_ground_temp_df = upload_state_temp_data(spark, input_bucket, temp_bucket, "Surface_Temps/GlobalLandTemperaturesByState.csv", "state_surface_temps" )
 
-    #create_dim_tables(spark, temp_bucket, create_dim_queries)
-    #create_fact_table(spark, temp_bucket, create_fact_queries)
+
+
 
 
 if __name__ == "__main__":

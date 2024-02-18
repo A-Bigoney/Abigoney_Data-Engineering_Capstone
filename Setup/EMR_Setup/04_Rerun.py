@@ -33,7 +33,6 @@ sftp.put('C:\\Users\\abigoney\\Documents\\School\\NanoDegree\\Capstone\\Setup\\d
 
 sftp.put('C:\\Users\\abigoney\\Documents\\School\\NanoDegree\\Capstone\\Project\\etl.py', 'etl.py')
 
-sftp.put('C:\\Users\\abigoney\\Documents\\School\\NanoDegree\\Capstone\\Project\\sql_dim_tables.py', 'sql_dim_tables.py')
 
 sftp.close()
 ssh_client.close()

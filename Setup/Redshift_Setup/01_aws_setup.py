@@ -165,9 +165,8 @@ output=['[CLUSTER]','\n',
         'ARN=\'',DWH_ROLE_ARN,'\'\n\n',
 
         '[S3]','\n',
-        'LOG_DATA=\'s3://udacity-dend/log-data\'\n',
-        'LOG_JSONPATH=\'s3://udacity-dend/log_json_path.json\'\n',
-        'SONG_DATA=\'s3://udacity-dend/song-data\'\n\n'
+        'INPUT_BUCKET=s3a://andrew-capstone-data/Data_Files\n',
+        'TEMP_BUCKET=s3a://andrews-emr-temp/temp\n\n',
 
         '[AWS]','\n',
         'KEY=',KEY,'\n',
@@ -183,18 +182,3 @@ for item in output:
     dwh_file.write(item)
 dwh_file.close()
 
-"""
-
-DB_NAME=dev
-DB_USER=awsuser
-DB_PASSWORD=Passw0rd
-DB_PORT=5439
-
-[IAM_ROLE]
-ARN='arn:aws:redshift-serverless:us-east-1:718407078345:namespace/ac38d610-ab51-4bcb-87d7-7a45f545e719'
-
-[S3]
-LOG_DATA='s3://udacity-dend/log-data'
-LOG_JSONPATH='s3://udacity-dend/log_json_path.json'
-SONG_DATA='s3://udacity-dend/song-data'
-"""

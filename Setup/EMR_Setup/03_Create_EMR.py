@@ -16,19 +16,19 @@ import time
 #                --release-label "emr-5.36.1" \
 #                --instance-count 1 \
 #                --applications Name=Spark Name=Zeppelin \
-#                --ec2-attributes KeyName=spark-cluster,SubnetId=subnet-01c397b90507476d9 \
+#                --ec2-attributes KeyName=spark-cluster,SubnetId=subnet-0ecf1e80183f16b51 \
 #                --instance-type m5.xlarge \
-#                --log-uri s3://andrews-logging/emrlogs/ > ClusterID.json""").read())
+#                --log-uri s3://andrews-emr-temp/emrlogs/ > ClusterID.json""").read())
 
 print(os.popen("""aws emr create-cluster \
                 --name udacity_capstone \
                 --use-default-roles \
                 --release-label "emr-6.15.0" \
-                --instance-count 1 \
+                --instance-count 2 \
                 --applications Name=Spark Name=Zeppelin \
-                --ec2-attributes KeyName=spark-cluster,SubnetId=subnet-01c397b90507476d9 \
+                --ec2-attributes KeyName=spark-cluster,SubnetId=subnet-0ecf1e80183f16b51 \
                 --instance-type m5.xlarge \
-                --log-uri s3://andrews-logging/emrlogs/ > ClusterID.json""").read())
+                --log-uri s3://andrews-emr-temp/emrlogs/ > ClusterID.json""").read())
 
 
 with open('ClusterID.json') as file:
@@ -49,11 +49,6 @@ print("30 Seconds remaining")
 time.sleep(20)
 print("10 Seconds remaining")
 time.sleep(10)
-
-import os
-import json
-import pandas as pd
-import time
 
 
 with open('ClusterID.json') as file:
@@ -84,8 +79,6 @@ sftp = ssh_client.open_sftp()
 sftp.put('C:\\Users\\abigoney\\Documents\\School\\NanoDegree\\Capstone\\Setup\\dwh.cfg', 'dwh.cfg')
 
 sftp.put('C:\\Users\\abigoney\\Documents\\School\\NanoDegree\\Capstone\\Project\\etl.py', 'etl.py')
-
-sftp.put('C:\\Users\\abigoney\\Documents\\School\\NanoDegree\\Capstone\\Project\\sql_dim_tables.py', 'sql_dim_tables.py')
 
 sftp.close()
 ssh_client.close()
